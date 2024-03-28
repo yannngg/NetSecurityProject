@@ -5,7 +5,8 @@ import tkinter.messagebox
 import sniffer as Sniffer
 import parse as Parse
 from tkinter import ttk, filedialog
-
+from PIL import Image
+from PIL import ImageTk
 
 def xx():
     tk.messagebox.showinfo('通知', '当前选项的功能暂未实现')
@@ -21,13 +22,6 @@ class gui:
         """图形界面创建，传入参数为生成的嗅探器实例和iface网卡列表"""
         self.sniffer = sniffer
         self.ifaces_list = ifaces_list
-        
-        # print("打印网卡信息列表内容：")
-        # for i in self.ifaces_list:
-        #     print(i)
-        
-        # print("网卡信息打印完毕！")
-        
         self.packet_wait_queue = packet_wait_queue
 
         self.sniffer_process = None
@@ -82,6 +76,8 @@ class gui:
         self.menu = tk.Menu(self.root)
 
         # 创建菜单栏的抓包选项
+        self.menu.add_command(label='打开', command=self.open_pcap_file)
+        self.menu.entryconfigure('打开', state=tk.ACTIVE)
         self.menu.add_command(label='另存为', command=self.save_as)
         self.menu.entryconfigure('另存为', state=tk.DISABLED)
         self.menu.add_command(label='停止抓包', command=self.stop_capture)
@@ -95,13 +91,19 @@ class gui:
         self.root.config(menu=self.menu)
 
     def create_open_file_panel(self):
-        self.open_pcap_frame = tk.Frame(self.first_panel)
-        self.open_pcap_frame.grid(row=0, columnspan=2, sticky='nsew')
+    #    self.open_pcap_frame = tk.Frame(self.first_panel)
+    #    self.open_pcap_frame.grid(row=0, columnspan=1, sticky='nsew')
 
-        label = tk.Label(self.open_pcap_frame, text='打开', font=('楷书', 20), fg='red')
-        button = tk.Button(self.open_pcap_frame, text='选择文件路径', command=self.open_pcap_file,bg="LightSkyBlue")
-        label.pack(side=tk.TOP, fill=tk.X)
-        button.pack(side=tk.TOP, expand=tk.TRUE)
+        #label = tk.Label(self.open_pcap_frame, text='打开', font=('楷书', 20), fg='red')
+        # button = tk.Button(self.open_pcap_frame, text='选择文件路径', command=self.open_pcap_file,bg="LightSkyBlue")
+        # #label.pack(side=tk.TOP, fill=tk.X)
+        # button.pack(side=tk.TOP, expand=tk.TRUE)
+        image = Image.open("C:/Users/lenovo/Pictures/Saved Pictures/0000.png")
+        photo = ImageTk.PhotoImage(image)
+        # self.root.geometry('800x600')
+        label = tk.Label(self.first_panel, image=photo)
+        label.image = photo     				# in case the image is recycled
+        label.grid()
 
     def create_packet_bin_panel(self):
         """创建包的二进制数据预览界面，被start_capture_panel调用"""
@@ -239,19 +241,17 @@ class gui:
         self.iface_list_treeview.heading("2", text="名称")
         self.iface_list_treeview.heading("3", text="MAC地址")
         self.iface_list_treeview.heading("4", text="IPv4地址")
-        self.iface_list_treeview.heading("5", text="IPV6地址")
-        
-        
+        self.iface_list_treeview.heading("5", text="IPv6地址")
 
         self.iface_list_treeview.configure(xscrollcommand=self.iface_list_Xbar.set,
                                            yscrollcommand=self.iface_list_Ybar.set)
 
-        label = tk.Label(self.ifaces_choose_frame, text='捕获', font=('楷书', 20), fg='red')
+        #label = tk.Label(self.ifaces_choose_frame, text='捕获', font=('楷书', 20), fg='red')
         label_filter = tk.Label(self.ifaces_choose_frame, text='   过滤器：  ')
         self.filter_str = tk.StringVar()
         self.filter = tk.Entry(self.ifaces_choose_frame, textvariable=self.filter_str)
 
-        label.pack(side=tk.TOP, fill=tk.X)
+        #label.pack(side=tk.TOP, fill=tk.X)
         self.iface_list_Xbar.pack(side=tk.BOTTOM, fill=tk.X)
         self.iface_list_Ybar.pack(side=tk.RIGHT, fill=tk.Y)
         self.iface_list_treeview.pack(side=tk.BOTTOM, expand=tk.TRUE, fill=tk.BOTH)
@@ -260,12 +260,12 @@ class gui:
 
         # 网卡信息插入treeview中
         for ifaces in ifaces_list[1:]:
-            ifaces = [i.strip(' ') for i in ifaces]
             if len(ifaces) == 0 or len(ifaces) == 1:
                 continue
-            
+            ifaces = [i.strip(' ') for i in ifaces]
             self.iface_list_treeview.insert("", "end", value=ifaces)
         self.iface_list_treeview.update()
+
         self.iface_list_treeview.bind("<Double-1>", self.switch_capture_panel)
 
     def switch_capture_panel(self, event):
