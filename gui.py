@@ -47,29 +47,16 @@ class gui:
 
         # 创建顶部菜单栏
         self.create_menu()
-
         self.root.rowconfigure(0, weight=1)
         self.root.columnconfigure(0, weight=1)
-
-
-        # 启动软件时的界面，上方进行文件操作，下方选择网卡进行抓包
-        self.first_panel = tk.Frame(self.root)
-        self.first_panel.grid(sticky='NSEW')
-
-        # 上方显示文件界面
-        self.first_panel.rowconfigure(0, weight=1)
-        self.first_panel.columnconfigure(0, weight=1)
-        # 下方显示网卡界面
-        self.first_panel.rowconfigure(1, weight=1)
-        self.first_panel.columnconfigure(1, weight=1)
-        # 创建上方面板,功能为打开pcap文件
-        self.create_open_file_panel()
+        # 开始逻辑
         # 创建下方面板
-        self.create_ifaces_panel(ifaces_list=ifaces_list)
-
+        self.create_ifaces_panel(ifaces_list=self.ifaces_list)
         self.root.protocol('WM_DELETE_WINDOW', self.exit_all)
         # 进入消息循环
         self.root.mainloop()
+
+        
 
     def create_menu(self):
         # 创建菜单栏
@@ -84,32 +71,29 @@ class gui:
         self.menu.entryconfigure('停止抓包', state=tk.DISABLED)
         self.menu.add_command(label='重新开始抓包', command=self.start_capture)
         self.menu.entryconfigure('重新开始抓包', state=tk.DISABLED)
+        self.menu.add_command(label='返回首页', command=self.back_to_first)
+        self.menu.entryconfigure('返回首页', state=tk.DISABLED)
         self.menu.add_command(label='退出', command=self.exit_all)
         self.menu.entryconfigure('退出', state=tk.ACTIVE)
 
         # 使菜单显示出来
         self.root.config(menu=self.menu)
 
-    def create_open_file_panel(self):
-    #    self.open_pcap_frame = tk.Frame(self.first_panel)
-    #    self.open_pcap_frame.grid(row=0, columnspan=1, sticky='nsew')
-
-        #label = tk.Label(self.open_pcap_frame, text='打开', font=('楷书', 20), fg='red')
-        # button = tk.Button(self.open_pcap_frame, text='选择文件路径', command=self.open_pcap_file,bg="LightSkyBlue")
-        # #label.pack(side=tk.TOP, fill=tk.X)
-        # button.pack(side=tk.TOP, expand=tk.TRUE)
+    def show_logo(self):
         image = Image.open("C:/Users/lenovo/Pictures/Saved Pictures/0000.png")
         photo = ImageTk.PhotoImage(image)
         # self.root.geometry('800x600')
         label = tk.Label(self.first_panel, image=photo)
         label.image = photo     				# in case the image is recycled
-        label.grid()
+        label.pack(side=tkinter.TOP)
+
 
     def create_packet_bin_panel(self):
         """创建包的二进制数据预览界面，被start_capture_panel调用"""
         # 包二进制数据界面
         self.packet_bin_info = tk.Frame(self.root, bg='lightgray')
-        self.packet_bin_info.pack(side=tk.RIGHT, fill=tk.BOTH, expand=tk.TRUE)
+        self.packet_bin_info.pack(side=tkinter.RIGHT, fill=tkinter.BOTH, expand=True)
+
 
         self.packet_bin_info.update()
 
@@ -216,12 +200,34 @@ class gui:
         self.after_capture_filter.pack(side=tk.LEFT, fill=tk.X, expand=tk.TRUE)
 
         self.packet_list_treeview.bind("<ButtonPress-1>", self.display_packet_info)
+    
+    def back_to_first(self):
+        self.packet_list_frame.destroy()
+        self.packet_header_info.destroy()
+        self.packet_bin_info.destroy()
+        
+        self.create_ifaces_panel(self.ifaces_list)
 
     def create_ifaces_panel(self, ifaces_list=None):
         """创建打开界面下方的网卡选择面板"""
+        self.menu.entryconfigure('另存为', state=tk.DISABLED)
+        self.menu.entryconfigure('返回首页', state=tk.DISABLED)
+        self.menu.entryconfigure('重新开始抓包', state=tk.DISABLED)
+        self.menu.entryconfigure('退出', state=tk.ACTIVE)
+        
+        
+        self.first_panel = tk.Frame(self.root)
+        self.first_panel.pack(side=tkinter.BOTTOM, fill=tkinter.X, expand=True)
+        # 上方显示文件界面
+        self.first_panel.rowconfigure(0, weight=1)
+        self.first_panel.columnconfigure(0, weight=1)
+        # 下方显示网卡界面
+        self.first_panel.rowconfigure(1, weight=1)
+        self.first_panel.columnconfigure(1, weight=1)
+        self.show_logo()
         # 设计下方界面
         self.ifaces_choose_frame = tk.Frame(self.first_panel)
-        self.ifaces_choose_frame.grid(row=1, columnspan=2, sticky='nsew')
+        self.ifaces_choose_frame.pack(side=tkinter.BOTTOM, fill=tkinter.X, expand=True, anchor=tkinter.CENTER, padx=10, pady=10, ipadx=5, ipady=100)
 
         self.iface_list_treeview = ttk.Treeview(self.ifaces_choose_frame, show='headings',
                                                 columns=("1", "2", "3", "4", "5"))
@@ -270,7 +276,6 @@ class gui:
 
     def switch_capture_panel(self, event):
         """双击选择一个iface，切换到抓包界面开始抓包"""
-
         # 解析过滤器
         self.filter_id = self.parse_filter(self.filter_str.get())
         if self.filter_id < 0:
@@ -299,7 +304,6 @@ class gui:
     def start_capture_panel(self):
         """被switch_capture_panel函数调用，开启抓包界面。同时启动抓包和解析包的线程
         传入的参数为网卡信息列表，依次为索引值、名称、ipv4、ipv6、mac地址"""
-
         self.first_panel.destroy()
 
         # 创建抓包实时更新面板，位于菜单栏下方
@@ -313,6 +317,8 @@ class gui:
         self.menu.entryconfigure('停止抓包', state=tk.ACTIVE)
         self.menu.entryconfigure('重新开始抓包', state=tk.DISABLED)
         self.menu.entryconfigure('另存为', state=tk.DISABLED)
+        self.menu.entryconfigure('返回首页', state=tk.DISABLED)
+        self.menu.entryconfigure('退出', state=tk.ACTIVE)
 
         # 清空界面（在重新开始抓包时清空原有的抓包记录）
         self.packet_list_treeview.delete(*self.packet_list_treeview.get_children())
@@ -345,6 +351,9 @@ class gui:
         self.menu.entryconfigure('停止抓包', state=tk.DISABLED)
         self.menu.entryconfigure('重新开始抓包', state=tk.ACTIVE)
         self.menu.entryconfigure('另存为', state=tk.ACTIVE)
+        self.menu.entryconfigure('返回首页', state=tk.ACTIVE)
+        self.menu.entryconfigure('退出', state=tk.ACTIVE)
+        
 
     def display_packets(self):
         # 确定当前是否有数据包需要display
@@ -509,6 +518,7 @@ class gui:
             self.menu.entryconfigure('停止抓包', state=tk.DISABLED)
             self.menu.entryconfigure('重新开始抓包', state=tk.DISABLED)
             self.menu.entryconfigure('另存为', state=tk.ACTIVE)
+            self.menu.entryconfigure('返回首页', state=tk.ACTIVE)
 
             index = 0
             while len(self.packet_info) != index:
