@@ -21,6 +21,13 @@ class gui:
         """图形界面创建，传入参数为生成的嗅探器实例和iface网卡列表"""
         self.sniffer = sniffer
         self.ifaces_list = ifaces_list
+        
+        # print("打印网卡信息列表内容：")
+        # for i in self.ifaces_list:
+        #     print(i)
+        
+        # print("网卡信息打印完毕！")
+        
         self.packet_wait_queue = packet_wait_queue
 
         self.sniffer_process = None
@@ -215,7 +222,7 @@ class gui:
         self.ifaces_choose_frame.grid(row=1, columnspan=2, sticky='nsew')
 
         self.iface_list_treeview = ttk.Treeview(self.ifaces_choose_frame, show='headings',
-                                                columns=("4", "1", "2", "5", "3"))
+                                                columns=("1", "2", "3", "4", "5"))
         self.iface_list_Xbar = ttk.Scrollbar(self.ifaces_choose_frame,
                                              orient=tk.HORIZONTAL,
                                              command=self.iface_list_treeview.xview)
@@ -228,11 +235,13 @@ class gui:
         self.iface_list_treeview.column("3", anchor="center", width=ifaces_list_width - 100)
         self.iface_list_treeview.column("4", anchor="center", width=ifaces_list_width)
         self.iface_list_treeview.column("5", anchor="center", width=ifaces_list_width - 50)
-        self.iface_list_treeview.heading("1", text="名称")
-        self.iface_list_treeview.heading("2", text="MAC地址")
-        self.iface_list_treeview.heading("3", text="IPv6地址")
-        self.iface_list_treeview.heading("4", text="索引值")
-        self.iface_list_treeview.heading("5", text="IPv4地址")
+        self.iface_list_treeview.heading("1", text="索引值")
+        self.iface_list_treeview.heading("2", text="名称")
+        self.iface_list_treeview.heading("3", text="MAC地址")
+        self.iface_list_treeview.heading("4", text="IPv4地址")
+        self.iface_list_treeview.heading("5", text="IPV6地址")
+        
+        
 
         self.iface_list_treeview.configure(xscrollcommand=self.iface_list_Xbar.set,
                                            yscrollcommand=self.iface_list_Ybar.set)
@@ -251,9 +260,12 @@ class gui:
 
         # 网卡信息插入treeview中
         for ifaces in ifaces_list[1:]:
+            ifaces = [i.strip(' ') for i in ifaces]
+            if len(ifaces) == 0 or len(ifaces) == 1:
+                continue
+            
             self.iface_list_treeview.insert("", "end", value=ifaces)
         self.iface_list_treeview.update()
-
         self.iface_list_treeview.bind("<Double-1>", self.switch_capture_panel)
 
     def switch_capture_panel(self, event):
@@ -268,7 +280,7 @@ class gui:
         item = self.iface_list_treeview.identify('item', event.x, event.y)
         iface = self.iface_list_treeview.item(item, 'values')
 
-        index = int(iface[1])
+        index = int(iface[0])
 
         # 界面切换至抓包
         if index <= 1:
@@ -305,7 +317,7 @@ class gui:
         # 清空界面（在重新开始抓包时清空原有的抓包记录）
         self.packet_list_treeview.delete(*self.packet_list_treeview.get_children())
 
-        self.sniffer.create_socket(int(self.iface[1]))
+        self.sniffer.create_socket(int(self.iface[0]))
 
         self.packet_wait_queue.queue.clear()
         # 创建抓包线程

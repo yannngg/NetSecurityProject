@@ -240,11 +240,27 @@ def parse_pcap_file(filename):
 
     return pcap_header, packet_time, packet_list, packet_info, packet_head
 
+# 传输层协议及其协议号
+Transport_Layer_Protocol = {
+    '1'  : 'ICMP',
+    '2'  : 'IGMP',
+    '6'  : 'TCP',
+    '17' : 'UDP',
+    '47' : 'GRE',
+    '50' : 'ESP',
+    '51' : 'AH',
+    '58' : 'ICMPv6',
+    '88' : 'EIGRP',
+    '89' : 'OSPF',
+    '112': 'VRRP',
+    '115': 'L2TP',
+}
 
 "type字段标识为 0x86dd，表示承载的上层协议是IPv6，IPv4对比：type字段为0x0800"
 def parse_a_packet(packet, info, packet_head_json, dns_stream, dns_stream_index):
     """ 解析一个数据包，最后返回info和json
     """
+    
     # 解析数据包的链路层
     ip_packet, eth_header = parse_eth(packet)
 
@@ -257,9 +273,9 @@ def parse_a_packet(packet, info, packet_head_json, dns_stream, dns_stream_index)
         trans_packet, ip_header = parse_ipv4(ip_packet)
         info['src_addr'] = ip_header['Source_Address']
         info['dst_addr'] = ip_header['Destination_Address']
-        info['type'] = 'IPv4'
+        info['type'] = ip_header['Protocol']
         packet_head_json['Internet Protocol Version 4'] = ip_header
-
+        
         if ip_header['Protocol'] == '6':
             # 解析tcp
             app_packet, tcp_header = parse_tcp(trans_packet)
@@ -298,6 +314,8 @@ def parse_a_packet(packet, info, packet_head_json, dns_stream, dns_stream_index)
             icmp_header = parse_icmp(trans_packet)
             info['type'] = 'ICMP'
             packet_head_json['ICMP'] = icmp_header
+        else:
+            info['type'] = Transport_Layer_Protocol[ip_header['Protocol']]
         # else:
             # 其他类型的协议，未实现
             # print("无法解析IP层头部的字段Protocol(" + ip_header['Protocol'] + ')')
@@ -309,7 +327,7 @@ def parse_a_packet(packet, info, packet_head_json, dns_stream, dns_stream_index)
 
     elif eth_header['Type'] == '0x86dd':
         pkt, ip_header = parse_ipv6(ip_packet)
-        info['type'] = 'IPv6'
+        info['type'] = Transport_Layer_Protocol[ip_header['Protocol']]
         info['src_addr'] = ip_header['Source_Address']
         info['dst_addr'] = ip_header['Destination_Address']
         packet_head_json['Internet Protocol Version 6'] = ip_header
@@ -411,20 +429,25 @@ def parse_ipv6(packet):
     # 58    ICMPv6信息报文扩展报头
     # 59    无下一个扩展报头
     # ref: https://blog.csdn.net/luguifang2011/article/details/81667826
-    ip_header['Next_Header'] = header_info[2]
+    ip_header['Next_Header'] = str(header_info[2])
     # ttl
     ip_header['Hop_Limit'] = header_info[3]
     ip_header['Source_Address'] = inet_ntop(AF_INET6, header_info[4])
     ip_header['Destination_Address'] = inet_ntop(AF_INET6, header_info[5])
 
-    # if ip_header['Next_Header'] == 17:
-    #     # udp
-    #     ip_header['Protocol'] = 17
-    # elif ip_header['Next_Header'] == 6:
-    #     # tcp
-    #     ip_header['Protocol'] = 6
-    # else:
-    #     print("Can not parse next_header type:(", ip_header['Next_Header'], ") in ipv6 header")
+    if ip_header['Next_Header'] in Transport_Layer_Protocol.keys():
+        # 直接识别传输层协议
+        ip_header['Protocol'] = ip_header['Next_Header']
+    else:
+        ptr = 40
+        # 解析出下一首部和首部长度
+        NH_HL = unpack("!BB", packet[ptr:ptr+2])
+        while (str(NH_HL[0]) not in Transport_Layer_Protocol.keys()):
+            ptr = ptr + 2 + NH_HL[1]
+            NH_HL = unpack("!BB", packet[ptr:ptr+2])
+        
+        ip_header['Protocol'] = str(NH_HL[0])
+        return packet[ptr:], ip_header
 
     return packet[40:], ip_header
 
@@ -433,6 +456,7 @@ def parse_tcp(packet):
     """解析传输层头部，类型为tcp
     :return: 传输层payload，字典形式的tcp层头部信息
     """
+  
     header_info = unpack("!HHIIHHHH", packet[:20])
 
     tcp_header = {}
@@ -470,6 +494,7 @@ def parse_udp(packet):
     udp_header['Checksum'] = header_info[3]
 
     return packet[8:], udp_header
+
 
 
 def parse_icmp(packet):
