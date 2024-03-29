@@ -338,9 +338,9 @@ def parse_a_packet(packet, info, packet_head_json, dns_stream, dns_stream_index)
         print("链路层无法识别[802.1Q tag]协议")
     elif eth_header['Type'] == '0x8847':
         print("链路层无法识别[MPLS Label]协议")
-    else:
-        # unknown ip protocol
-        print("链路层无法识别")
+    # else:
+    #     # unknown ip protocol
+    #     print("链路层无法识别")
 
     return info, packet_head_json, dns_stream, dns_stream_index
 
