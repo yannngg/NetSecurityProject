@@ -198,10 +198,10 @@ class gui:
         label_filter.pack(side=tk.LEFT)
         self.filter_button.pack(side=tk.RIGHT)
         self.after_capture_filter.pack(side=tk.LEFT, fill=tk.X, expand=tk.TRUE)
-
         self.packet_list_treeview.bind("<ButtonPress-1>", self.display_packet_info)
     
     def back_to_first(self):
+        # 删除创建的三个Frame，以创建首页Frame
         self.packet_list_frame.destroy()
         self.packet_header_info.destroy()
         self.packet_bin_info.destroy()
@@ -562,6 +562,18 @@ class gui:
             return 2
         elif filter_str == 'dns':
             return 13
+        elif filter_str == 'http':
+            return 14
+        elif filter_str == 'https':
+            return 15
+        elif filter_str == 'ftp':
+            return 16
+        elif filter_str == 'ssh':
+            return 17
+        elif filter_str == 'smtp':
+            return 18
+        elif filter_str == 'icmp':
+            return 19
         else:
             filter_str = filter_str.split('==')
             # ip==1.1.1.1
@@ -594,13 +606,6 @@ class gui:
             # udp.stream==12
             elif filter_str[0] == 'udp.stream':
                 return 12
-        # 使用ip ip==1.1.1.1 elif re.match('ip==(([01]{0,1}\d{0,1}\d|2[0-4]\d|25[0-5])\.){3}([01]{0,1}\d{0,
-        # 1}\d|2[0-4]\d|25[0-5])', filter_str): 使用端口号过滤 port==12 elif re.match('port==^(6553[0-5]|655[0-2][0-9]|65[
-        # 0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{1,3}|[0-9])$', filter_str): elif re.match('(
-        # src|dst).ip==(([01]{0,1}\d{0,1}\d|2[0-4]\d|25[0-5])\.){3}([01]{0,1}\d{0,1}\d|2[0-4]\d|25[0-5])',
-        # filter_str): elif re.match('(src|dst|tcp|udp).port==(?:[1-6][0-5]{0,2}?[0-3]?[0-5]?|[1-5][0-9]{0,4})$',
-        # filter_str): elif re.match('(tcp|udp).stream\s*==\s*\d*', filter_str): 更高级的过滤 src.ip==1.1.1.1 dst.port==23
-        # tcp.stream==1 udp.port==44
         return -1
 
     def after_capture_filter_packet(self):

@@ -276,49 +276,8 @@ def parse_a_packet(packet, info, packet_head_json, dns_stream, dns_stream_index)
         info['type'] = ip_header['Protocol']
         packet_head_json['Internet Protocol Version 4'] = ip_header
         
-        if ip_header['Protocol'] == '6':
-            # 解析tcp
-            app_packet, tcp_header = parse_tcp(trans_packet)
-            info['src_port'] = tcp_header['Source_Port']
-            info['dst_port'] = tcp_header['Destination_Port']
-            info['type'] = 'TCP'
-            packet_head_json['Transmission Control Protocol'] = tcp_header
-
-        elif ip_header['Protocol'] == '17':
-            # 解析udp
-            app_packet, udp_header = parse_udp(trans_packet)
-            info['src_port'] = udp_header['Source_Port']
-            info['dst_port'] = udp_header['Destination_Port']
-            info['type'] = 'UDP'
-            packet_head_json['User Datagram Protocol'] = udp_header
-
-            if info['dst_port'] == '53':
-                # 发送DNS请求
-                # 格式：流序号-本机端口号-dns服务器ip
-                dns_stream.append(str(dns_stream_index) + '-' + info['src_port'] + '-' + info['dst_addr'])
-                info['dns_stream'] = dns_stream_index
-                info['type'] = 'DNS'
-                dns_stream_index += 1
-            if info['src_port'] == '53':
-                # 收到DNS应答
-                for item in dns_stream:
-                    index, port, ip = item.split('-')
-                    if port == info['dst_port'] and ip == info['src_addr']:
-                        info['dns_stream'] = index
-                        info['type'] = 'DNS'
-                        dns_stream.remove(item)
-                        break
-
-        elif ip_header['Protocol'] == '1':
-            # 解析icmp
-            icmp_header = parse_icmp(trans_packet)
-            info['type'] = 'ICMP'
-            packet_head_json['ICMP'] = icmp_header
-        else:
-            info['type'] = Transport_Layer_Protocol[ip_header['Protocol']]
-        # else:
-            # 其他类型的协议，未实现
-            # print("无法解析IP层头部的字段Protocol(" + ip_header['Protocol'] + ')')
+        info, packet_head_json, dns_stream = \
+            parse_trans(trans_packet, info, ip_header, packet_head_json, dns_stream, dns_stream_index)
 
     elif eth_header['Type'] == '0x0806':
         arp_header = parse_arp(ip_packet)
@@ -326,11 +285,15 @@ def parse_a_packet(packet, info, packet_head_json, dns_stream, dns_stream_index)
         packet_head_json['ARP'] = arp_header
 
     elif eth_header['Type'] == '0x86dd':
-        pkt, ip_header = parse_ipv6(ip_packet)
+        trans_packet, ip_header = parse_ipv6(ip_packet)
         info['type'] = Transport_Layer_Protocol[ip_header['Protocol']]
         info['src_addr'] = ip_header['Source_Address']
         info['dst_addr'] = ip_header['Destination_Address']
         packet_head_json['Internet Protocol Version 6'] = ip_header
+        # 对ipv6 数据报进行解析
+        info, packet_head_json, dns_stream = \
+            parse_trans(trans_packet, info, ip_header, packet_head_json, dns_stream, dns_stream_index)
+        
 
     elif eth_header['Type'] == '0x8864':
         print("链路层无法识别[PPPoE]协议")
@@ -338,12 +301,97 @@ def parse_a_packet(packet, info, packet_head_json, dns_stream, dns_stream_index)
         print("链路层无法识别[802.1Q tag]协议")
     elif eth_header['Type'] == '0x8847':
         print("链路层无法识别[MPLS Label]协议")
-    # else:
-    #     # unknown ip protocol
-    #     print("链路层无法识别")
+    else:
+        # unknown ip protocol
+        print("链路层无法识别")
 
     return info, packet_head_json, dns_stream, dns_stream_index
 
+
+# 解析传输层
+def parse_trans(trans_packet, info, ip_header, packet_head_json, dns_stream, dns_stream_index):
+    if ip_header['Protocol'] == '6':
+        # 解析tcp
+        app_packet, tcp_header = parse_tcp(trans_packet)
+        info['src_port'] = tcp_header['Source_Port']
+        info['dst_port'] = tcp_header['Destination_Port']
+        info['type'] = 'TCP'
+        packet_head_json['Transmission Control Protocol'] = tcp_header
+        
+        # 解析应用层
+        info, packet_head_json = parse_app(app_packet, info, packet_head_json)
+
+    elif ip_header['Protocol'] == '17':
+        # 解析udp
+        app_packet, udp_header = parse_udp(trans_packet)
+        info['src_port'] = udp_header['Source_Port']
+        info['dst_port'] = udp_header['Destination_Port']
+        info['type'] = 'UDP'
+        packet_head_json['User Datagram Protocol'] = udp_header
+
+        if info['dst_port'] == '53':
+            # 发送DNS请求
+            # 格式：流序号-本机端口号-dns服务器ip
+            dns_stream.append(str(dns_stream_index) + '-' + info['src_port'] + '-' + info['dst_addr'])
+            info['dns_stream'] = dns_stream_index
+            info['type'] = 'DNS'
+            dns_stream_index += 1
+        if info['src_port'] == '53':
+            # 收到DNS应答
+            for item in dns_stream:
+                index, port, ip = item.split('-')
+                if port == info['dst_port'] and ip == info['src_addr']:
+                    info['dns_stream'] = index
+                    info['type'] = 'DNS'
+                    dns_stream.remove(item)
+                    break
+        # 解析应用层
+        info, packet_head_json = parse_app(app_packet, info, packet_head_json)
+
+    elif ip_header['Protocol'] == '1':
+        # 解析icmp
+        icmp_header = parse_icmp(trans_packet)
+        info['type'] = 'ICMP'
+        packet_head_json['ICMP'] = icmp_header
+        
+    elif ip_header['Protocol'] == '58':
+        icmpv6_header = parse_icmpv6(trans_packet)
+        info['type'] = 'ICMPv6'
+        packet_head_json['ICMPv6'] = icmpv6_header
+        
+    else:
+        info['type'] = Transport_Layer_Protocol[ip_header['Protocol']]
+        
+    return info, packet_head_json, dns_stream
+
+# 解析应用层协议，简单通过端口来确定应用层协议
+def parse_app(app_packet, info, packet_head_json):
+    if info['src_port'] == '80' or info['dst_port'] == '80':
+        info['type'] = 'HTTP'
+        http_header = parse_http(app_packet, info)
+        packet_head_json['HyperText Transfer Protocol'] = http_header
+        
+    elif info['src_port'] == '53' or info['dst_port'] == '53':
+        info['type'] = 'DNS'
+        dns_header = parse_dns(app_packet)
+        packet_head_json['Domain Name System'] = dns_header
+    
+    elif info['src_port'] == '20' or info['dst_port'] == '20' \
+        or info['src_port'] == '21' or info['dst_port'] == '21':
+        info['type'] = 'FTP'
+        ftp_header = parse_ftp(app_packet)
+        packet_head_json['File Transfer Protocol'] = ftp_header
+
+    elif info['src_port'] == '22' or info['dst_port'] == '22':
+        info['type'] = 'SSH'
+        ssh_header = parse_ssh(app_packet)
+        packet_head_json['Secure Shell'] = ssh_header
+    
+    elif info['src_port'] == '23' or info['dst_port'] == '23':
+        info['type'] = 'TELNET'
+        
+    return info, packet_head_json
+    
 
 def bytes2mac_addr(addr):
     """将字节流转为MAC地址字符串"""
@@ -419,16 +467,6 @@ def parse_ipv6(packet):
     ip_header['Flow_Label'] = header_info[0] & 0xfffff
     # 单位为字节，包括了ipv6扩展头部
     ip_header['Payload_Length'] = header_info[1]
-    # 指代下一个头部类型，可以是传输层头部，也可以是ipv6拓展头部
-    # 0     逐跳选线扩展报头
-    # 60    目的选项扩展报头
-    # 43    路由扩展报头
-    # 44    分片扩展报头
-    # 51    认证扩展报头
-    # 50    封装安全有效载荷扩展报头
-    # 58    ICMPv6信息报文扩展报头
-    # 59    无下一个扩展报头
-    # ref: https://blog.csdn.net/luguifang2011/article/details/81667826
     ip_header['Next_Header'] = str(header_info[2])
     # ttl
     ip_header['Hop_Limit'] = header_info[3]
@@ -512,9 +550,24 @@ def parse_icmp(packet):
 
     return icmp_header
 
+def parse_icmpv6(packet):
+    """解析icmpv6头部，其位于ipv6头部的后面
+    :return: 字典形式的icmpv6头部信息
+    """
+    header_info = unpack("!BBHH", packet[:6])
+
+    icmpv6_header = {}
+    icmpv6_header['Type'] = header_info[0]
+    icmpv6_header['Code'] = header_info[1]
+    icmpv6_header['Checksum'] = header_info[2]
+    icmpv6_header['Identifier'] = header_info[3]
+
+    return icmpv6_header
+
+
 
 def parse_arp(packet):
-    """解析icmp头部，其位于mac头部的后面
+    """解析arp头部，其位于mac头部的后面
     :return: 字典形式的arp头部信息
     """
     header_info = unpack("!HHBBH", packet[:8])
@@ -552,3 +605,88 @@ def parse_arp(packet):
     return arp_header
 
 # TODO: DNS FTP SMTP TLS HTTP
+def parse_http(app_packet, info):
+    http_header = {}
+    # 解析http头部
+    packet_line = app_packet.decode().split("\r\n")
+    packet_line = [i.split(' ') for i in packet_line]
+    
+    
+    # 一坨，但是有用
+    if len(packet_line) > 1 and len(packet_line[0]) == 3:
+        # 请求
+        if info['dst_port'] == '80':
+            http_header['Method'] = packet_line[0][0]
+            http_header['URL'] = packet_line[0][1]
+            http_header['Protocol'] = packet_line[0][2]
+        elif info['src_port'] == '80':
+            http_header['Protocol'] = packet_line[0][0]
+            http_header['Status_Code'] = packet_line[0][1]
+            http_header['Reason_Phrase'] = packet_line[0][2]
+        
+        # 添加首部字段
+        for i in range(1, len(packet_line)):
+            if ':' in packet_line[i][0]:
+                value = ''
+                for j in packet_line[i][1:]:
+                    if ',' in j:
+                        value += j
+                    else:
+                        value += j + ' '
+                http_header[packet_line[i][0].strip(':')] = value
+            
+            elif len(packet_line[i]) == 1:
+                data = ''
+                if (i + 1) < len(packet_line):
+                    data = ''
+                    for j in packet_line[i+1:]:
+                        for k in j:
+                            data += k   
+                http_header['Data'] = data
+                break
+        
+        http_header['Body'] = app_packet[len(app_packet) - len(app_packet.decode()):]
+        http_header['Size'] = len(app_packet)
+        http_header['Time'] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    return http_header
+
+    
+
+def parse_ftp(app_packet):
+    ftp_header = {}
+    # 解析ftp头部
+    ftp_header['Request Type'] = app_packet[0: 8]
+    ftp_header['Username'] = app_packet[8: 12]
+    ftp_header['Password'] = app_packet[12: 16]
+    ftp_header['Data Port'] = app_packet[16: 20]
+    ftp_header['Server Response Code'] = app_packet[20: 24]
+    ftp_header['Server Response Message'] = app_packet[24:]
+    return ftp_header
+
+
+def parse_smtp(app_packet):
+    smtp_header = {}
+    # 解析smtp头部
+    smtp_header['Server Response Code'] = app_packet[0: 8]
+    smtp_header['Server Response Message'] = app_packet[8:]
+    return smtp_header
+
+def parse_dns(app_packet):
+    dns_header = {}
+    # 解析dns头部
+    dns_header['Transaction ID'] = app_packet[0: 2]
+    dns_header['Flags'] = app_packet[2: 4]
+    dns_header['Question Count'] = app_packet[4: 6]
+    dns_header['Answer RRs'] = app_packet[6: 8]
+    dns_header['Authority RRs'] = app_packet[8: 10]
+    return dns_header
+
+def parse_ssh(app_packet):
+    ssh_header = {}
+    # 解析ssh头部
+    ssh_header['Protocol Version'] = app_packet[0: 2]
+    ssh_header['Software Version'] = app_packet[2: 4]
+    ssh_header['Connection Count'] = app_packet[4: 6]
+    ssh_header['Cipher Specs Length'] = app_packet[6: 8]
+    ssh_header['MAC Length'] = app_packet[8: 10]
+    return ssh_header
